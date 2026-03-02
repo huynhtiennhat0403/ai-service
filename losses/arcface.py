@@ -15,3 +15,12 @@ class ArcFaceLoss(nn.Module):
         # Khởi tạo ma trận trọng số W có kích thước (out_features, in_features)
         self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features))
         nn.init.xavier_uniform_(self.weight)
+    
+    def forward(self, embedding, label):
+        # Bước 1 & 2: Chuẩn hóa L2 cho feature đầu vào (x) và trọng số (W)
+        embedding_norm = F.normalize(embedding, p=2, dim=1)
+        weight_norm = F.normalize(self.weight, p=2, dim=1)
+
+        # Bước 3 & 4: Tính cos(theta) thông qua tích vô hướng (Tương đương FullyConnected không bias)
+        # original_target_logit
+        cosine = F.linear(embedding_norm, weight_norm)
