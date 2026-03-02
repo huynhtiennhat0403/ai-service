@@ -78,7 +78,7 @@ class MobileFaceNet(nn.Module):
         
         # Linear conv1x1
         self.linear_conv = LinearBlock(512, embedding_size, kernel=(1, 1), stride=(1, 1), padding=(0, 0))
-        
+
     def _make_layer(self, block, t, in_c, out_c, n, s):
         layers = []
         # Lớp đầu tiên của chuỗi sử dụng stride = s
@@ -98,3 +98,11 @@ class MobileFaceNet(nn.Module):
         
         # Làm phẳng ma trận thành vector đặc trưng (Batch_size, 128)
         return out.view(out.shape[0], -1)
+    
+if __name__ == "__main__":
+    # Test thử mô hình
+    model = MobileFaceNet(embedding_size=128)
+    dummy_input = torch.randn(4, 3, 112, 112) # Giả lập 1 batch gồm 4 ảnh 112x112
+    output = model(dummy_input)
+    print(f"Shape của ảnh đầu vào: {dummy_input.shape}")
+    print(f"Shape của vector đầu ra: {output.shape}") 
