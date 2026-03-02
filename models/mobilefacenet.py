@@ -21,3 +21,26 @@ class LinearBlock(nn.Module):
     
     def forward(self, x):
         return self.bn(self.conv(x))
+
+class Bottleneck(nn.Module):
+    """Khối Residual Bottleneck như trong kiến trúc MobileNetV2."""
+    def __init__(self, in_c, out_c, stride, t):
+        super().__init__()
+        # Chỉ dùng kết nối thặng dư (residual connection) khi stride=1 và số channel không đổi
+        self.use_res_connect = stride == 1 and in_c == out_c
+        exp_c = in_c * t # Hệ số mở rộng t
+        
+        self.conv = nn.Sequential(
+            # 1. Pointwise (Mở rộng số lượng channel)
+            ConvBlock(in_c, exp_c, kernel=(1, 1), stride=(1, 1), padding=(0, 0)),
+            # 2. Depthwise (Tích chập theo từng channel riêng biệt)
+            ConvBlock(exp_c, exp_c, kernel=(3, 3), stride=(stride, stride), padding=(1, 1), groups=exp_c),
+            # 3. Linear Pointwise (Chiếu lại về số channel mong muốn, không dùng PReLU)
+            LinearBlock(exp_c, out_c, kernel=(1, 1), stride=(1, 1), padding=(0, 0))
+        )
+        
+    def forward(self, x):
+        if self.use_res_connect:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
