@@ -35,14 +35,21 @@ def get_embedding(model, img_tensor, device='cpu'):
 def cosine_similarity(vec1, vec2):
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
+# Main
 if __name__ == "__main__":
+    # 1. Cấu hình
     WEIGHTS_PATH = 'saved_models/mobilefacenet.pth'
     THRESHOLD = 0.45
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = load_model(WEIGHTS_PATH, device)
+
+    # Khởi tạo Face Detector 
     face_detector = FaceDetector()
+
+    # 2. Giả lập cơ sở dữ liệu tủ đồ (2 tủ trống)
     lockers = {1: None, 2: None}
 
+    # 3. Khởi động Webcam
     cap = cv2.VideoCapture(0)
     print("\n--- HỆ THỐNG KIOSK TỦ ĐỒ SẴN SÀNG ---")
     print("Nhấn 'I' để Check-in (Gửi đồ)")
@@ -51,19 +58,85 @@ if __name__ == "__main__":
 
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret:
+            break
+
+        # Lật khung hình cho giống gương
         frame = cv2.flip(frame, 1)
         display_frame = frame.copy()
 
-        # Tạm thời chỉ hiển thị Text và khung hình
+        # Tìm khuôn mặt
+        ih, iw, _ = frame.shape
+        detection = face_detector.detect(frame)
+        face_img = None
+
+        if detection is not None:
+            x, y, w, h = detection
+            # Cắt khuôn mặt (mở rộng thêm viền)
+            x1 = max(0, x - 20)
+            y1 = max(0, y - 20)
+            x2 = min(iw, x + w + 20)
+            y2 = min(ih, y + h + 20)
+            face_img = frame[y1:y2, x1:x2]
+            cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # Hướng dẫn hiển thị trên màn hình
         cv2.putText(display_frame, "I: GUi DO | O: LAY DO | Q: THOAT", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        cv2.imshow("Kiosk FaceID", display_frame)
 
+        cv2.imshow("Kiosk FaceID", display_frame)
         key = cv2.waitKey(1) & 0xFF
+
+        # --- LOGIC NHẤN PHÍM ---
         if key == ord('q'):
             print("Đang tắt hệ thống...")
             break
+
+        elif key == ord('i'):
+            print("\n[YÊU CẦU GỬI ĐỒ]")
+            if face_img is None or face_img.size == 0:
+                print("-> Không tìm thấy khuôn mặt! Vui lòng nhìn thẳng vào camera.")
+                continue
+
+            # Tìm tủ trống
+            empty_locker = None
+            for locker_id, saved_vector in lockers.items():
+                if saved_vector is None:
+                    empty_locker = locker_id
+                    break
+
+            if empty_locker is None:
+                print("-> Xin lỗi, hiện tại đã hết tủ trống!")
+            else:
+                tensor = preprocess_face(face_img)
+                vector = get_embedding(model, tensor, device)
+                lockers[empty_locker] = vector
+                print(f"-> Gửi đồ thành công! Tủ số {empty_locker} đã mở. (Đã lưu dữ liệu khuôn mặt)")
+
+        elif key == ord('o'):
+            print("\n[YÊU CẦU LẤY ĐỒ]")
+            if face_img is None or face_img.size == 0:
+                print("-> Không tìm thấy khuôn mặt! Vui lòng nhìn thẳng vào camera.")
+                continue
+
+            tensor = preprocess_face(face_img)
+            current_vector = get_embedding(model, tensor, device)
+
+            matched_locker = None
+            highest_sim = 0
+
+            for locker_id, saved_vector in lockers.items():
+                if saved_vector is not None:
+                    sim = cosine_similarity(current_vector, saved_vector)
+                    if sim > THRESHOLD and sim > highest_sim:
+                        highest_sim = sim
+                        matched_locker = locker_id
+
+            if matched_locker is not None:
+                print(f"-> Xác thực thành công (Độ tin cậy: {highest_sim:.2f}). Mở tủ số {matched_locker}!")
+                lockers[matched_locker] = None
+            else:
+                print("-> Khuôn mặt không khớp với bất kỳ tủ nào đang gửi đồ!")
 
     cap.release()
     cv2.destroyAllWindows()
